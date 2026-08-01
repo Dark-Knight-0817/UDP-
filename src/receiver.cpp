@@ -5,6 +5,24 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+ #include "udp_packet.h"
+
+/**
+ * @note UDP数据报,每次都是1个报文
+ *       一个完整的数据报长度由返回值决定.天然具有边界性
+ *       所以,如果send > recv, recv 无法一次性接收,就会全部扔掉,而不会部分保存到缓冲区
+ */
+udp_packet analyse_packet(char *buffer, int len)
+{
+    udp_packet packet;
+    // 1. 解析序号
+    // &是取地址, *是解引用
+    packet.seq = *(int32_t*)buffer; // 硬件架构决定buffer地址字节数,int32_t和char只是决定数据的解读方式
+    // 2. 解析内容
+    memcpy(packet.data, buffer + sizeof(int32_t), len - sizeof(int32_t));
+    return packet;
+}
+
 int main()
 {
     const int PORT = 9000;
@@ -39,8 +57,13 @@ int main()
             perror("recvfrom");
             continue;
         }
-        buffer[recv_len] = '\0';  // Null-terminate the received data
-        std::cout << "Received:" << buffer << std::endl;
+        // 版本1: 直接打印接收到的内容
+        // buffer[recv_len] = '\0';  // Null-terminate the received data
+        // std::cout << "Received:" << buffer << std::endl;
+        // 版本2: 使用固定结构体解析数据报
+        udp_packet packet = *(udp_packet*)buffer; // 固定结构体时,可以用这种方法
+        std::cout << "Received packet seq: " << packet.seq << ", data: " << packet.data << std::endl;
+
     }
 
     close(sockfd);
