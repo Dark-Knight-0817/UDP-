@@ -63,7 +63,14 @@ int main()
         // 版本2: 使用固定结构体解析数据报
         udp_packet packet = *(udp_packet*)buffer; // 固定结构体时,可以用这种方法
         std::cout << "Received packet seq: " << packet.seq << ", data: " << packet.data << std::endl;
-
+        if(rand() % 100 < 20){  // 20% 丢包率
+            continue; // 模拟丢包,不回复ACK
+        }
+        // 收到后回复ACK,不需要data
+        int32_t ack_msg = packet.seq; // 只需要序号
+        sendto(sockfd, &ack_msg, sizeof(ack_msg), 0,
+               (struct sockaddr*)&client_addr, client_addr_len);
+        std::cout << "Sent ACK for seq: " << packet.seq << std::endl;
     }
 
     close(sockfd);

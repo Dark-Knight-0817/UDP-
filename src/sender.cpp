@@ -27,10 +27,19 @@ int main()
     server_addr.sin_port = htons(PORT);
     inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr);
 
+    // 2.5 设置超时
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 200000;    // 200 ms
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    
+    // 缓冲
+    char buffer[1024];
+
     // 3. send data in a loop
     for(int i = 0; i < 20; ++i)
     {
-        std::string msg = "packet #" + std::to_string(i);
+        std::string msg = "User ID#" + std::to_string(i);
         udp_packet packet;
         packet.seq = i;
         /**
@@ -43,9 +52,30 @@ int main()
         packet.data[sizeof(packet.data) - 1] = '\0';                // 确保以'\0'结尾
         // sendto(sockfd, msg.c_str(), msg.size() , 0, (sockaddr*)&server_addr, sizeof(server_addr));
         // std::cout << "Sent: " << msg << std::endl;
-        sendto(sockfd, &packet, sizeof(packet), 0 , (sockaddr*)&server_addr, sizeof(server_addr));
-        std::cout << "Sent packet seq: " << packet.seq << ", data: " << packet.data << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        while(true)
+        {
+            sendto(sockfd, &packet, sizeof(packet), 0 , (sockaddr*)&server_addr, sizeof(server_addr));
+            std::cout << "Sent packet seq: " << packet.seq << ", data: " << packet.data << std::endl;
+            // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+            int ack_len = recvfrom(sockfd, buffer, sizeof(buffer) - 1, 0, nullptr, nullptr);
+            if(ack_len < 0)
+            {
+                perror("recvfrom");
+                std::cout << "Timeout waiting for ACK for packet seq: " << packet.seq << std::endl;
+                continue;
+            }else{
+                int32_t ack_seq = *(int32_t*)buffer;
+                if(ack_seq != packet.seq)
+                {
+                    std::cout << "Received ACK for unexpected packet seq: " << ack_seq << ", expected: " << packet.seq << std::endl;
+                    continue; // Ignore and wait for the correct ACK
+                }
+                std::cout << "Received ACK for packet seq: " << ack_seq << std::endl;
+                break; 
+            }
+        }
+        
     }
 
     std::cout << "Done sending packets." << std::endl;
